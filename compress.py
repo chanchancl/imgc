@@ -5,11 +5,13 @@ import time
 import logging
 import pathlib
 import asyncio
+import argparse
 import threading
 from PIL import Image
 
-LOGGING_FILE = 'Transform.log'
-NEW_PREFIX = 'new '
+
+_LOGGING_FILE = 'Transform.log'
+_NEW_PREFIX = 'new '
 
 # config the logging
 def configLogging():
@@ -26,7 +28,7 @@ def configLogging():
     console.setFormatter(consoleFormatter)
     console.setLevel(logging.INFO)
 
-    logfile = logging.FileHandler(LOGGING_FILE, 'a', encoding='utf-8')
+    logfile = logging.FileHandler(_LOGGING_FILE, 'a', encoding='utf-8')
     logfile.setFormatter(fileFormatter)
     logfile.setLevel(logging.INFO)
 
@@ -82,7 +84,7 @@ class TransformManager:
     
     def ScanDir(self):
         for root, dirs, files in os.walk(self.dir):
-            newroot = root.replace(self.dir, NEW_PREFIX + self.dir)
+            newroot = root.replace(self.dir, _NEW_PREFIX + self.dir)
 
             # scan all dirs
             # change root and create same dir trees
@@ -221,11 +223,11 @@ class TransformManager:
         #Asyncio()
 
 
-def main():
+def main(destDir):
     configLogging()
     logging.info('#'*79)
     logging.info('Trnasform Start!')
-    mgr = TransformManager('exHentai', ['rar', 'txt', 'db'])
+    mgr = TransformManager(destDir, ['rar', 'txt', 'db'])
 
     logging.info('1.Start scanf')
     scanStart = time.time()
@@ -242,9 +244,16 @@ def main():
     logging.info('Compressed   : {:>6.2f} MB'.format(mgr.bytesCompress/1024/1024))
     logging.info('scan time  : {:>6.3f} s'.format(scanEnd-scanStart))
     logging.info('trans time : {:>6.3f} s'.format(transEnd-transStart))
-    logging.info('average {:>6.4f} s per image'.format((transEnd-transStart)/len(mgr.tList)))
+    if len(mgr.tList) != 0:
+        logging.info('average {:>6.4f} s per image'.format((transEnd-transStart)/len(mgr.tList)))
 
     logging.info('#'*79 +'\n')
 
+
+
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description='Compress your images.')
+    parser.add_argument('destDir', help='the dir you want compress.')
+
+    args = parser.parse_args()
+    main(args.destDir)
