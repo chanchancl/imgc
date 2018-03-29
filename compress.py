@@ -51,7 +51,7 @@ def CompressImage(filein, fileout, rate):
  
 class OSFileExists(Exception):
     def __init__(self, file):
-        self.file = file
+        self.filename = file
 
 class Transform:
     fin  = None
@@ -129,15 +129,16 @@ class TransformManager:
         def SingleThread():
             for trans in self.tList:
                 self.bytesUncompress += os.path.getsize(trans.fin)
+                meta = self.meta
                 try:
                     trans.DoTransform()
                     meta['done'] += 1
                     self.bytesCompress += os.path.getsize(trans.fout)
                 except OSError as e:
-                    logging.error('{} is truncated'.format(e.file))
+                    logging.error('{} is truncated'.format(e.filename))
                     meta['error'] += 1
                 except OSFileExists as e:
-                    logging.debug('{} is exists'.format(e.file))
+                    logging.debug('{} is exists'.format(e.filename))
                     self.bytesCompress += os.path.getsize(trans.fout)
                     meta['exists'] += 1
 
@@ -168,10 +169,10 @@ class TransformManager:
                         meta['done'] += 1
                         self.bytesCompress += os.path.getsize(trans.fout)
                     except OSError as e:
-                        logging.error('{} is truncated'.format(e.file))
+                        logging.error('{} is truncated'.format(e.filename))
                         meta['error'] += 1
                     except OSFileExists as e:
-                        logging.debug('{} is exists'.format(e.file))
+                        logging.debug('{} is exists'.format(e.filename))
                         self.bytesCompress += os.path.getsize(trans.fout)
                         meta['exists'] += 1
                     
@@ -192,6 +193,7 @@ class TransformManager:
 
 
         def Asyncio():
+            meta = self.meta
             async def Run(trans, meta):
                 self.bytesUncompress += os.path.getsize(trans.fin)
                 try:
@@ -199,10 +201,10 @@ class TransformManager:
                     meta['done'] += 1
                     self.bytesCompress += os.path.getsize(trans.fout)
                 except OSError as e:
-                    logging.error('{} is truncated'.format(e.file))
+                    logging.error('{} is truncated'.format(e.filename))
                     meta['error'] += 1
                 except OSFileExists as e:
-                    logging.debug('{} is exists'.format(e.file))
+                    logging.debug('{} is exists'.format(e.filename))
                     self.bytesCompress += os.path.getsize(trans.fout)
                     meta['exists'] += 1
                 
