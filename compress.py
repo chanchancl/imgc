@@ -9,27 +9,25 @@ import argparse
 import threading
 from PIL import Image
 
-
-_LOGGING_FILE = 'Transform.log'
+_LOGGING_FILE = 'logfile.log'
 _NEW_PREFIX = 'new '
 
 # config the logging
 def configLogging():
     # get logger and set level
     rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.INFO)
+    rootLogger.setLevel(logging.DEBUG)
 
     # formatters
-    consoleFormatter = logging.Formatter('[%(asctime)s] %(message)s')
-    fileFormatter = logging.Formatter('%(levelname)s [%(asctime)s] %(message)s')
+    formatter = logging.Formatter('%(levelname)s [%(asctime)s] %(message)s')
 
     # handlers
     console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(consoleFormatter)
+    console.setFormatter(formatter)
     console.setLevel(logging.INFO)
 
     logfile = logging.FileHandler(_LOGGING_FILE, 'a', encoding='utf-8')
-    logfile.setFormatter(fileFormatter)
+    logfile.setFormatter(formatter)
     logfile.setLevel(logging.INFO)
 
     rootLogger.addHandler(console)
@@ -41,6 +39,12 @@ def configLogging():
 # rate : float
 def CompressImage(filein, fileout, rate):
     image = Image.open(filein)
+    
+    # 2018.5.1
+    # fix bugs, that some pics is opend with mode 'P'
+    # and can't save with ext '.jpg'
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
 
     w,h = image.size
     w,h = map(int,[w*rate,h*rate])
@@ -118,7 +122,7 @@ class TransformManager:
 
                 oldfile = os.path.join(root,file)
                 newfile = os.path.join(newroot, file)
-                logging.debug("find filter file {}, translate it to {}".format(oldfile,newfile))
+                logging.debug("find filter file {}".format(oldfile))
 
                 trans = Transform(oldfile, newfile, self.rate)
                 self.tList.append(trans)
@@ -168,24 +172,43 @@ class TransformManager:
 
             def Run(meta):
                 trans = GetTransform()
-
+                lock = threading.Lock()
+                
                 while trans:
-                    self.bytesBeforecompress += os.path.getsize(trans.fin)
+                    size = os.path.getsize(trans.fin)
+                    lock.acquire()
+                    self.bytesBeforecompress += size
+                    lock.release()
                     try:
                         trans.DoTransform()
+                        size = os.path.getsize(trans.fout)
+                        
+                        lock.acquire()
                         meta['done'] += 1
-                        self.bytesAftercompress += os.path.getsize(trans.fout)
-                    except OSError as e:
-                        logging.error('{} is truncated'.format(e.filename))
+                        self.bytesAftercompress += size
+                        lock.release()
+
+                    except (OSError,IOError):
+                        logging.error('{} is truncated or not a valid pic.'.format(trans.fin))
+                        logging.error('or it is a pic with mode \'P\'')
+                        lock.acquire()
                         meta['errors'] += 1
+                        lock.release()
+
                     except OSFileExists as e:
                         logging.debug('{} is exists'.format(e.filename))
-                        self.bytesAftercompress += os.path.getsize(trans.fout)
+                        size = os.path.getsize(trans.fout)
+                        lock.acquire()
                         meta['exists'] += 1
+                        self.bytesAftercompress += size
+                        lock.release()
                     
+                    lock.acquire()
                     proc = meta['done']+meta['errors']+meta['exists']
+                    lock.release()
                     if proc % 100 == 0:
                         logging.info('({}/{}) have processed.'.format(proc,meta['all']))
+                    
                     trans = GetTransform()
                             
             threads = [threading.Thread(target=Run, args=(self.meta,)) for _ in range(10)]
@@ -194,6 +217,7 @@ class TransformManager:
                 thread.start()
             for thread in threads:
                 thread.join()
+            
             logging.info('MultiThread done   : {}'.format(self.meta['done']))
             logging.info('MultiThread exists : {}'.format(self.meta['exists']))
             logging.info('MultiThread errors  : {}'.format(self.meta['errors']))
@@ -250,9 +274,10 @@ def main(destDir, rate=0.6):
     #unuse, log during transform
     meta = None
 
-    logging.info('Transform Info : ')
-    logging.info('BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress/1024/1024))
-    logging.info('AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress/1024/1024))
+    x = 1/1024**2
+    logging.info('Transform Info')
+    logging.info('BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress*x))
+    logging.info('AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress*x))
     logging.info('scan time  : {:>6.3f} s'.format(scanEnd-scanStart))
     logging.info('trans time : {:>6.3f} s'.format(transEnd-transStart))
     if len(mgr.tList) != 0:
