@@ -176,6 +176,7 @@ class TransformManager:
                 
                 while trans:
                     size = os.path.getsize(trans.fin)
+                    
                     lock.acquire()
                     self.bytesBeforecompress += size
                     lock.release()
@@ -191,6 +192,7 @@ class TransformManager:
                     except (OSError,IOError):
                         logging.error('{} is truncated or not a valid pic.'.format(trans.fin))
                         logging.error('or it is a pic with mode \'P\'')
+
                         lock.acquire()
                         meta['errors'] += 1
                         lock.release()
@@ -198,6 +200,7 @@ class TransformManager:
                     except OSFileExists as e:
                         logging.debug('{} is exists'.format(e.filename))
                         size = os.path.getsize(trans.fout)
+                        
                         lock.acquire()
                         meta['exists'] += 1
                         self.bytesAftercompress += size
@@ -259,7 +262,7 @@ def main(destDir, rate=0.6):
     configLogging()
     logging.info('#'*79)
     logging.info('Trnasform Start!')
-    mgr = TransformManager(destDir, ['rar', 'txt', 'db'], rate)
+    mgr = TransformManager(destDir, ['.rar', '.txt', '.db', '.py'], rate)
 
     logging.info('1.Start scanf')
     scanStart = time.time()

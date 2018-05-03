@@ -2,19 +2,18 @@
 import os
 import sys
 
-if len(sys.argv) == 1 :
-    print('Please input offset')
-    sys.exit(0)
+print('Please input path : ')
+path = input()
+print('Please input offset : ')
+offset = int(input())
 
-offset = int(sys.argv[1])
-
-
-raw = [x for x in os.listdir() if os.path.splitext(x)[-1] != '.py' ]
+raw = [ os.path.join(path,x) for x in os.listdir(path) if os.path.splitext(x)[-1] != '.py']
 new = []
 
 for x in raw:
     name,ext = os.path.splitext(x)
-    new.append('{:0>3d}{}'.format(int(name)+offset, ext))
+    dir, name = name.rsplit('\\',1)
+    new.append('{}\\{:0>3d}{}'.format(dir, int(name)+offset, ext))
 
 raw.reverse()
 new.reverse()
