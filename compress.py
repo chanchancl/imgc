@@ -19,7 +19,7 @@ def configLogging():
     rootLogger.setLevel(logging.DEBUG)
 
     # formatters
-    formatter = logging.Formatter('%(levelname)s [%(asctime)s] %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
 
     # handlers
     console = logging.StreamHandler(sys.stdout)
@@ -32,26 +32,34 @@ def configLogging():
 
     rootLogger.addHandler(console)
     rootLogger.addHandler(logfile)
+    
+def _mkdir(path):
+    if not os.path.exists(path):
+        os.mkdir(path)
 
+__loggingINFO = logging.info
+def _logging(msg):
+    __loggingINFO(' ' + msg)
+logging.info = _logging
+        
 
 # filein : path of image file [in]
 # fileout : path of image file [out]
 # rate : float
 def CompressImage(filein, fileout, rate):
-    image = Image.open(filein)
-    
-    # 2018.5.1
-    # fix bugs, that some pics is opend with mode 'P'
-    # and can't save with ext '.jpg'
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
+    with Image.open(filein) as image:
+        # 2018.5.1
+        # fix bugs, that some pics is opend with mode 'P'
+        # and can't save with ext '.jpg'
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
 
-    w,h = image.size
-    w,h = map(int,[w*rate,h*rate])
+        w,h = image.size
+        w,h = map(int,[w*rate,h*rate])
 
-    output = image.resize((w,h),Image.ANTIALIAS)
-    output.save(fileout)
-
+        output = image.resize((w,h),Image.ANTIALIAS)
+        output.save(fileout)
+        
  
 class OSFileExists(Exception):
     def __init__(self, file):
@@ -71,7 +79,7 @@ class Transform:
             raise OSFileExists(self.fout)
             
         CompressImage(self.fin, self.fout, self.rate)
-        logging.debug('transform {}'.format(self.fin))
+        logging.debug('  transform {}'.format(self.fin))
 
     
 class TransformManager:
@@ -91,10 +99,12 @@ class TransformManager:
     def ScanDir(self):
         for root, dirs, files in os.walk(self.dir):
             try:
+                # path exists at least 1 '\\'(split)
                 rt, oth = root.split('\\', 1)
                 rt = _NEW_PREFIX + rt
                 newroot = os.path.join(rt,oth)
             except ValueError:
+                # there is only 1 root
                 newroot = root.replace(self.dir, _NEW_PREFIX + self.dir)
 
             # scan all dirs
@@ -105,14 +115,10 @@ class TransformManager:
                  \d\             \d\
             '''
             for dir in dirs:
-                if not os.path.exists(newroot):
-                    os.mkdir(newroot)
-                    
+                _mkdir(newroot)
                 newdir = os.path.join(newroot, dir)
-
-                if not os.path.exists(newdir):
-                    os.mkdir(newdir)
-                logging.debug('newdir {}'.format(newdir))
+                _mkdir(newdir)
+                logging.debug('  newdir {}'.format(newdir))
             
             for file in files:
                 ext = os.path.splitext(file)[-1]
@@ -122,12 +128,12 @@ class TransformManager:
 
                 oldfile = os.path.join(root,file)
                 newfile = os.path.join(newroot, file)
-                logging.debug("find filter file {}".format(oldfile))
+                logging.debug("  find filter file {}".format(oldfile))
 
                 trans = Transform(oldfile, newfile, self.rate)
                 self.tList.append(trans)
         
-        logging.info('Scan files : {}'.format(len(self.tList)))
+        logging.info('  Scan files : {}'.format(len(self.tList)))
 
     def TransformAll(self):
         self.meta = {
@@ -146,20 +152,20 @@ class TransformManager:
                     meta['done'] += 1
                     self.bytesAftercompress += os.path.getsize(trans.fout)
                 except OSError as e:
-                    logging.error('{} is truncated'.format(e.filename))
+                    logging.error('  {} is truncated'.format(e.filename))
                     meta['errors'] += 1
                 except OSFileExists as e:
-                    logging.debug('{} is exists'.format(e.filename))
+                    logging.debug('  {} is exists'.format(e.filename))
                     self.bytesAftercompress += os.path.getsize(trans.fout)
                     meta['exists'] += 1
 
                 proc = meta['done']+meta['errors']+meta['exists']
                 if proc % 100 == 0:
-                    logging.info('({}/{}) have processed.'.format(proc,meta['all']))
+                    logging.info('  ({}/{}) have processed.'.format(proc,meta['all']))
 
-            logging.info('SingleThread done   : {}'.format(meta['done']))
-            logging.info('SingleThread exists : {}'.format(meta['exists']))
-            logging.info('SingleThread errors : {}'.format(meta['errors']))
+            logging.info('  SingleThread Done   : {}'.format(meta['done']))
+            logging.info('  SingleThread Exists : {}'.format(meta['exists']))
+            logging.info('  SingleThread Errors : {}'.format(meta['errors']))
 
         def MultiThread():
             tList = self.tList.copy()
@@ -190,15 +196,14 @@ class TransformManager:
                         lock.release()
 
                     except (OSError,IOError):
-                        logging.error('{} is truncated or not a valid pic.'.format(trans.fin))
-                        logging.error('or it is a pic with mode \'P\'')
+                        logging.error('  {} is truncated or not a valid pic. '.format(trans.fin))
 
                         lock.acquire()
                         meta['errors'] += 1
                         lock.release()
 
                     except OSFileExists as e:
-                        logging.debug('{} is exists'.format(e.filename))
+                        logging.debug('  {} is exists'.format(e.filename))
                         size = os.path.getsize(trans.fout)
                         
                         lock.acquire()
@@ -210,20 +215,20 @@ class TransformManager:
                     proc = meta['done']+meta['errors']+meta['exists']
                     lock.release()
                     if proc % 100 == 0:
-                        logging.info('({}/{}) have processed.'.format(proc,meta['all']))
+                        logging.info('  ({}/{}) have processed.'.format(proc,meta['all']))
                     
                     trans = GetTransform()
                             
-            threads = [threading.Thread(target=Run, args=(self.meta,)) for _ in range(10)]
+            threads = [threading.Thread(target=Run, args=(self.meta,)) for _ in range(8)]
 
             for thread in threads:
                 thread.start()
             for thread in threads:
                 thread.join()
             
-            logging.info('MultiThread done   : {}'.format(self.meta['done']))
-            logging.info('MultiThread exists : {}'.format(self.meta['exists']))
-            logging.info('MultiThread errors  : {}'.format(self.meta['errors']))
+            logging.info('  MultiThread Done   : {}'.format(self.meta['done']))
+            logging.info('  MultiThread Exists : {}'.format(self.meta['exists']))
+            logging.info('  MultiThread Errors : {}'.format(self.meta['errors']))
 
         def Asyncio():
             meta = self.meta
@@ -234,33 +239,36 @@ class TransformManager:
                     meta['done'] += 1
                     self.bytesAftercompress += os.path.getsize(trans.fout)
                 except OSError as e:
-                    logging.error('{} is truncated'.format(e.filename))
+                    logging.error('  {} is truncated'.format(e.filename))
                     meta['errors'] += 1
                 except OSFileExists as e:
-                    logging.debug('{} is exists'.format(e.filename))
+                    logging.debug('  {} is exists'.format(e.filename))
                     self.bytesAftercompress += os.path.getsize(trans.fout)
                     meta['exists'] += 1
                 
                 proc = meta['done']+meta['errors']+meta['exists']
                 if proc % 100 == 0:
-                    logging.info('({}/{}) have processed.'.format(proc,meta['all']))
+                    logging.info('  ({}/{}) have processed.'.format(proc,meta['all']))
 
             tasks = [Run(trans, self.meta) for trans in self.tList]
             loop = asyncio.get_event_loop()
             loop.run_until_complete(asyncio.wait(tasks))
             loop.close()
-            logging.info('Asyncio done   : {}'.format(meta['done']))
-            logging.info('Asyncio exists : {}'.format(meta['exists']))
-            logging.info('Asyncio errors : {}'.format(meta['errors']))
+            logging.info('  Asyncio Done   : {}'.format(meta['done']))
+            logging.info('  Asyncio Exists : {}'.format(meta['exists']))
+            logging.info('  Asyncio Errors : {}'.format(meta['errors']))
         
         #SingleThread()
         MultiThread()
         #Asyncio()
+        
 
 
 def main(destDir, rate=0.6):
     configLogging()
-    logging.info('#'*79)
+    
+    splitLine = '#'*79
+    logging.info(splitLine)
     logging.info('Trnasform Start!')
     mgr = TransformManager(destDir, ['.rar', '.txt', '.db', '.py'], rate)
 
@@ -276,24 +284,30 @@ def main(destDir, rate=0.6):
     
     #unuse, log during transform
     meta = None
-
+    
+    scanTime = scanEnd - scanStart
+    transTime = transEnd - transStart
+    sumTime = scanTime + transTime
+    
     x = 1/1024**2
-    logging.info('Transform Info')
-    logging.info('BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress*x))
-    logging.info('AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress*x))
-    logging.info('scan time  : {:>6.3f} s'.format(scanEnd-scanStart))
-    logging.info('trans time : {:>6.3f} s'.format(transEnd-transStart))
+    logging.info('3.Transform Info')
+    logging.info('  BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress*x))
+    logging.info('  AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress*x))
+    logging.info('  Scan time  : {:>6.3f} s'.format(scanTime))
+    logging.info('  Trans time : {:>6.3f} s'.format(transTime))
+    logging.info('  Sum time   : {:>6.3f} s'.format(scanTime + transTime))
     if len(mgr.tList) != 0:
-        logging.info('average {:>6.4f} s per image'.format((transEnd-transStart)/len(mgr.tList)))
+        logging.info('  Average {:>6.3f} s per image'.format(sumTime/len(mgr.tList)))
 
-    logging.info('#'*79 +'\n')
+    logging.info(splitLine)
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Compress your images.')
     parser.add_argument('destDir', help='the dir you want compress.')
-    parser.add_argument('-r', '--rate', default=0.6, type=float)
+    parser.add_argument('-r', '--rate', default=0.6, type=float, help='the rate bettween new h/w and raw h/w.')
 
     args = parser.parse_args()
     main(args.destDir, args.rate)
+    
