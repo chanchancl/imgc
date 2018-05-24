@@ -171,8 +171,7 @@ class TransformManager:
             tList = self.tList.copy()
             def GetTransform():
                 if len(tList):
-                    trans = tList[0]
-                    del(tList[0])
+                    trans = tList.pop()
                     return trans
                 return None
 
