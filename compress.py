@@ -52,6 +52,16 @@ def CompressImage(filein, fileout, rate):
         # fix bugs, that some pics is opend with mode 'P'
         # and can't save with ext '.jpg'
         if image.mode != 'RGB':
+            # 2018.6.18
+            # fix bugs, pic with mode L,can't save with mode 'RGB'
+            # so translate it to mode 'P' first
+            # and I don't know why I must convert twice and must
+            # get a exception first.
+            if image.mode == 'L':
+                try:
+                    image = image.convert('P')
+                except Exception:
+                    image = image.convert('P')
             image = image.convert('RGB')
 
         w,h = image.size
@@ -133,6 +143,9 @@ class TransformManager:
                 trans = Transform(oldfile, newfile, self.rate)
                 self.tList.append(trans)
         
+        # 因为从tList中获取元素顺序是倒的，所以在这里也倒一下
+        self.tList.reverse()
+
         logging.info('  Scan files : {}'.format(len(self.tList)))
 
     def TransformAll(self):
