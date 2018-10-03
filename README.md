@@ -1,7 +1,7 @@
 # imgc
 A script for compressing images
 
-# Usuages
+# Useages
 compress.py destdir [rate]
 
 * destdir : include all image dir
