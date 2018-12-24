@@ -1,4 +1,3 @@
-
 import os
 import sys
 import time
@@ -43,6 +42,17 @@ def _logging(msg):
 logging.info = _logging
         
 
+_fileSize = {}
+        
+def GetFileSize(filePath):
+    if filePath in _fileSize:
+        return _fileSize[filePath]
+    if os.path.exists(filePath):
+        size = os.path.getsize(filePath)
+        _fileSize[filePath] = size
+        return size
+    return 0
+        
 # filein : path of image file [in]
 # fileout : path of image file [out]
 # rate : float
@@ -95,8 +105,12 @@ class Transform:
 class TransformManager:
     dir = None
     tList = None
+    nExists = 0
     bytesBeforecompress = 0
+    bytesAllBeforecompress = 0
     bytesAftercompress = 0
+    bytesAllAftercompress = 0
+    
     ignoreExt = None
     rate = 1.0
     
@@ -105,6 +119,7 @@ class TransformManager:
         self.tList = []
         self.ignoreExt = ignoreExt
         self.rate = rate
+        self.nExists = 0
     
     def ScanDir(self):
         for root, dirs, files in os.walk(self.dir):
@@ -138,6 +153,13 @@ class TransformManager:
 
                 oldfile = os.path.join(root,file)
                 newfile = os.path.join(newroot, file)
+                
+                self.bytesAllBeforecompress += os.path.getsize(oldfile)
+                if os.path.exists(newfile):
+                    self.nExists += 1
+                    logging.debug('  find exists file {}'.format(oldfile))
+                    self.bytesAllAftercompress += os.path.getsize(newfile)
+                    continue
                 logging.debug("  find filter file {}".format(oldfile))
 
                 trans = Transform(oldfile, newfile, self.rate)
@@ -146,13 +168,14 @@ class TransformManager:
         # 因为从tList中获取元素顺序是倒的，所以在这里也倒一下
         self.tList.reverse()
 
-        logging.info('  Scan files : {}'.format(len(self.tList)))
+        logging.info('  Uncompress files : {}'.format(len(self.tList)))
+        logging.info('  Exists files     : {}'.format(self.nExists))
 
     def TransformAll(self):
         self.meta = {
             'all'    : len(self.tList),
             'done'   : 0,
-            'exists' : 0,
+            'exists' : self.nExists,
             'errors' : 0,
         }
         
@@ -167,10 +190,10 @@ class TransformManager:
                 except OSError as e:
                     logging.error('  {} is truncated'.format(e.filename))
                     meta['errors'] += 1
-                except OSFileExists as e:
+                    '''except OSFileExists as e:
                     logging.debug('  {} is exists'.format(e.filename))
                     self.bytesAftercompress += os.path.getsize(trans.fout)
-                    meta['exists'] += 1
+                    meta['exists'] += 1'''
 
                 proc = meta['done']+meta['errors']+meta['exists']
                 if proc % 100 == 0:
@@ -214,9 +237,9 @@ class TransformManager:
                         meta['errors'] += 1
                         lock.release()
 
-                    except OSFileExists as e:
+                        '''except OSFileExists as e:
                         logging.debug('  {} is exists'.format(e.filename))
-                        size = os.path.getsize(trans.fout)
+                        size = os.path.getsize(trans.fout)'''
                         
                         lock.acquire()
                         meta['exists'] += 1
@@ -253,10 +276,10 @@ class TransformManager:
                 except OSError as e:
                     logging.error('  {} is truncated'.format(e.filename))
                     meta['errors'] += 1
-                except OSFileExists as e:
+                '''except OSFileExists as e:
                     logging.debug('  {} is exists'.format(e.filename))
                     self.bytesAftercompress += os.path.getsize(trans.fout)
-                    meta['exists'] += 1
+                    meta['exists'] += 1'''
                 
                 proc = meta['done']+meta['errors']+meta['exists']
                 if proc % 100 == 0:
@@ -303,13 +326,20 @@ def main(destDir, rate=0.6):
     
     x = 1/1024**2
     logging.info('3.Transform Info')
-    logging.info('  BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress*x))
-    logging.info('  AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress*x))
     logging.info('  Scan time  : {:>6.3f} s'.format(scanTime))
     logging.info('  Trans time : {:>6.3f} s'.format(transTime))
     logging.info('  Sum time   : {:>6.3f} s'.format(scanTime + transTime))
+    logging.info('  CompressItem Info')
+    logging.info('    BeforeCompress : {:>6.2f} MB'.format(mgr.bytesBeforecompress*x))
+    logging.info('    AfterCompress  : {:>6.2f} MB'.format(mgr.bytesAftercompress*x))
     if len(mgr.tList) != 0:
-        logging.info('  Average {:>6.3f} s per image'.format(sumTime/len(mgr.tList)))
+        logging.info('    Average {:>6.3f} s per image'.format(sumTime/len(mgr.tList)))
+    logging.info('  All Info')
+    logging.info('    AllByforeCompress : {:>7.2f} MB'.format(mgr.bytesAllBeforecompress*x))
+    logging.info('    AllAfterCompress  : {:>7.2f} MB'.format(mgr.bytesAllAftercompress*x))
+    logging.info('    Compress Rate     : {:>7.2f} %'.format(mgr.bytesAllAftercompress/mgr.    bytesAllBeforecompress*100.0))
+    logging.info('    All Average {:>6.3f} s per image'.format(sumTime/(len(mgr.tList)+mgr.nExists)))
+    
 
     logging.info(splitLine)
 
