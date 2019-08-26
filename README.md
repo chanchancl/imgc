@@ -1,11 +1,14 @@
-# imgc
+# imgc - images compress
 A script for compressing images
 
 # Useages
-compress.py destdir [rate]
+$ compress.py destdir [rate]
 
+required:
 * destdir : include all image dir
-* rate    : compress rate
+
+optional:
+* rate    : compress rate, default 60% (new witdh/ old width, as well as height)
 
 # Example
 
